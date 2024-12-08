@@ -2,7 +2,7 @@ import pandas as pd
 from src.data_scraping.reddit_scraper import scrape_reddit_data
 from src.data_processing.clean_data import process_data
 from src.sentiment_analysis.bert_sentiment import BertSentimentAnalyzer
-from src.model.train_model import train_model
+from src.model.train_model import AdvancedStockPredictor
 from src.utils.helpers import ensure_directory_exists
 from sklearn.metrics import precision_score, recall_score
 import time
@@ -30,18 +30,23 @@ def get_technical_indicators(stock):
         # Get historical data
         data = yf.download(stock, period="1mo")
         
-        # Add technical indicators
-        data['RSI'] = ta.momentum.RSIIndicator(data['Close']).rsi()
-        data['MACD'] = ta.trend.MACD(data['Close']).macd()
-        data['MA20'] = data['Close'].rolling(window=20).mean()
+        if data.empty:
+            return None
+            
+        # Calculate technical indicators
+        rsi = ta.momentum.RSIIndicator(data['Close']).rsi()
+        macd = ta.trend.MACD(data['Close']).macd()
+        ma20 = data['Close'].rolling(window=20).mean()
         
-        # Get latest values
-        latest = data.iloc[-1]
+        # Get latest values and handle NaN values
+        latest_rsi = rsi.iloc[-1] if not pd.isna(rsi.iloc[-1]) else 50
+        latest_macd = macd.iloc[-1] if not pd.isna(macd.iloc[-1]) else 0
+        latest_ma20 = ma20.iloc[-1] if not pd.isna(ma20.iloc[-1]) else data['Close'].iloc[-1]
         
         return {
-            'RSI': latest['RSI'],
-            'MACD': latest['MACD'],
-            'MA20': latest['MA20']
+            'RSI': latest_rsi,
+            'MACD': latest_macd,
+            'MA20': latest_ma20
         }
     except Exception as e:
         print(f"Error calculating technical indicators for {stock}: {e}")
@@ -73,16 +78,10 @@ def calculate_predicted_price(current_price, movement, technical_data=None):
         return "N/A"
 
 def main():
-    # Expanded list of stock names with their common names
+    # List of stock names with their common names
     stock_names = [
         "AAPL",      # Apple
         "TSLA",      # Tesla
-        "GOOGL",     # Google
-        "MSFT",      # Microsoft
-        "AMZN",      # Amazon
-        "META",      # Meta (Facebook)
-        "NVDA",      # NVIDIA
-        "AMD"        # AMD
     ]
     
     # Get real-time prices using yfinance
@@ -106,13 +105,7 @@ def main():
             # Scrape Reddit data with expanded search terms
             search_terms = {
                 "AAPL": ["AAPL", "Apple"],
-                "TSLA": ["TSLA", "Tesla"],
-                "GOOGL": ["GOOGL", "Google"],
-                "MSFT": ["MSFT", "Microsoft"],
-                "AMZN": ["AMZN", "Amazon"],
-                "META": ["META", "Facebook"],
-                "NVDA": ["NVDA", "NVIDIA"],
-                "AMD": ["AMD"]
+                "TSLA": ["TSLA", "Tesla"]
             }
             
             # Use both ticker and company name for searching
@@ -132,73 +125,59 @@ def main():
         time.sleep(5)
         
         try:
-            # Clean data
+            # Clean data and analyze sentiment
             process_data('data/raw/reddit_data.csv', 'data/processed/cleaned_data.csv')
-            
-            # Load cleaned data
             df = pd.read_csv('data/processed/cleaned_data.csv')
             
             if df.empty:
                 print(f"No cleaned data available for {stock}")
                 continue
             
-            # Analyze sentiment using BERT
-            sentiments = []
-            for text in df['cleaned_text']:
-                try:
-                    sentiment_value = bert_analyzer.analyze_sentiment(text)
-                    sentiments.append(sentiment_value)
-                except Exception as e:
-                    print(f"Error analyzing sentiment for text: {e}")
-                    sentiments.append(0)
+            # Analyze sentiment
+            df['sentiment'] = df['cleaned_text'].apply(lambda x: bert_analyzer.analyze_sentiment(x))
             
-            df['sentiment'] = sentiments
-            
-            # Get technical indicators
-            technical_data = get_technical_indicators(stock)
-            
-            # Calculate sentiment scores (1 for positive, 0 for negative)
+            # Calculate sentiment scores
             df['label'] = [1 if s > 0 else 0 for s in df['sentiment']]
             
+            # Prepare features
+            features = df[['sentiment']].values
+            
             # Train model and get predictions
-            model = train_model(df[['sentiment']].values, df['label'].values)
-            predictions = model.predict(df[['sentiment']].values)
+            predictor = AdvancedStockPredictor()
+            best_model = predictor.train_model(features, df['label'].values)
+            predictions = predictor.predict(features)
+            
+            # Calculate predicted movement
+            predicted_movement = predictions.mean()
             
             # Calculate metrics
-            accuracy = model.score(df[['sentiment']].values, df['label'].values)
+            accuracy = best_model.score(features, df['label'].values)
             precision = precision_score(df['label'], predictions)
             recall = recall_score(df['label'], predictions)
             
-            # Calculate predicted price movement
-            predicted_movement = sum(df['label']) / len(df['label'])
-            
-            # Get current price without the '$' symbol for calculation
+            # Calculate predicted price
             current_price = actual_prices[stock]
-            
-            # Calculate predicted price with technical indicators
+            technical_data = get_technical_indicators(stock)
             predicted_price = calculate_predicted_price(current_price, predicted_movement, technical_data)
             
-            # Store the results in a dictionary
+            # Store results
             result = {
                 "Stock": stock,
                 "Actual Price": f"${actual_prices[stock]}" if actual_prices[stock] != 'N/A' else 'N/A',
-                "Predicted Price Movement": f"{predicted_movement:.3f}",
                 "Predicted Price": predicted_price,
+                "Predicted Price Movement": f"{predicted_movement:.3f}",
                 "Model Accuracy": f"{accuracy:.3f}",
                 "Precision": f"{precision:.3f}",
                 "Recall": f"{recall:.3f}"
             }
             
-            # Append the result to our results list
             results.append(result)
             
             print(f"Successfully processed {stock}")
-            print(f"Current price: ${current_price}")
+            print(f"Current price: ${actual_prices[stock]}")
             print(f"Predicted price: {predicted_price}")
-            print(f"Predicted price movement: {predicted_movement:.3f}")
+            print(f"Predicted movement: {predicted_movement:.3f}")
             print(f"Model accuracy: {accuracy:.3f}")
-            print(f"Precision: {precision:.3f}")
-            print(f"Recall: {recall:.3f}")
             
         except Exception as e:
             print(f"Error in processing pipeline for {stock}: {e}")
@@ -215,9 +194,9 @@ def main():
             # Reorder columns
             results_df = results_df[[
                 "Stock", 
-                "Actual Price", 
-                "Predicted Price Movement",
+                "Actual Price",
                 "Predicted Price",
+                "Predicted Price Movement",
                 "Model Accuracy",
                 "Precision",
                 "Recall"
