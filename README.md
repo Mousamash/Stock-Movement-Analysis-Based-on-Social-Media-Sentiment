@@ -82,14 +82,12 @@ pip install -r requirements.txt
 ## Code Structure
 
 - **`main.py`**: The main script that orchestrates data scraping, sentiment analysis, and price prediction.
-- **`app.py`**: The Flask application that provides a web interface for the analysis.
 - **`requirements.txt`**: Lists all the required Python packages for the project.
 - **`src/data_scraping/reddit_scraper.py`**: Contains functions for scraping data from Reddit.
 - **`src/data_processing/clean_data.py`**: Handles data cleaning and preprocessing.
 - **`src/sentiment_analysis/bert_sentiment.py`**: Implements sentiment analysis using BERT.
 - **`src/model/train_model.py`**: Contains functions for training the prediction model.
 - **`src/utils/helpers.py`**: Utility functions for directory management and other helper tasks.
-- **`templates/`**: Contains HTML templates for the Flask web application.
 
 ## Future Improvements
 
