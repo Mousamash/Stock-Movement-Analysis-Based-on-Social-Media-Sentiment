@@ -89,6 +89,9 @@ pip install -r requirements.txt
 - **`src/model/train_model.py`**: Contains functions for training the prediction model.
 - **`src/utils/helpers.py`**: Utility functions for directory management and other helper tasks.
 
+  ## Final OutPut
+![capx](https://github.com/user-attachments/assets/1619e34d-551c-422f-9047-739c9a33ea33)
+
 ## Future Improvements
 
 - **Real-time Data**: Implement real-time data fetching and analysis.
