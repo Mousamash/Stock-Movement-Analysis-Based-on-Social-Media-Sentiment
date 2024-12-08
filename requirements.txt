@@ -1,0 +1,15 @@
+tweepy
+python-dotenv
+textblob
+scikit-learn
+praw
+pandas
+numpy
+nltk
+openpyxl
+yfinance
+transformers
+torch
+ta
+
+
